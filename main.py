@@ -1,8 +1,9 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import requests
 
-app = FastAPI()
+app = FastAPI(title="FPL Nexus API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +64,37 @@ def test_database():
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     
     return response
+
+
+FPL_BOOTSTRAP = "https://fantasy.premierleague.com/api/bootstrap-static/"
+FPL_FIXTURES = "https://fantasy.premierleague.com/api/fixtures/"
+
+@app.get("/fpl/health")
+def fpl_health():
+    """Lightweight health check reaching the official FPL endpoints and returning basic counts."""
+    try:
+        bs = requests.get(FPL_BOOTSTRAP, timeout=8)
+        bs.raise_for_status()
+        data = bs.json()
+        players = len(data.get("elements", []))
+        teams = len(data.get("teams", []))
+        # Try fixtures endpoint too
+        fx = 0
+        try:
+            rfx = requests.get(FPL_FIXTURES, timeout=8)
+            rfx.raise_for_status()
+            fixtures_data = rfx.json()
+            fx = len(fixtures_data) if isinstance(fixtures_data, list) else 0
+        except Exception:
+            fx = 0
+        return {
+            "status": "ok",
+            "players": players,
+            "teams": teams,
+            "fixtures": fx,
+        }
+    except Exception as e:
+        return {"status": "down", "error": str(e)[:200], "players": 0, "teams": 0, "fixtures": 0}
 
 
 if __name__ == "__main__":
